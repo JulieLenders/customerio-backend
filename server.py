@@ -1,39 +1,55 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+import os
 import requests
 
 app = Flask(__name__)
 
-# Base URL voor Customer.io API (EU-regio, verander dit indien je in de US-regio zit)
-CUSTOMER_IO_BASE_URL = "https://api-eu.customer.io/v1/api"
+# Basisconfiguratie
+CUSTOMERIO_API_KEY = os.environ.get("CUSTOMERIO_API_KEY")
+CUSTOMERIO_BASE_URL = "https://api.customer.io/v1/api"
 
-# API Key direct in de code (voor development-doeleinden, niet aanbevolen voor productie)
-API_KEY = "7991f3c67ee8b605e81ab35bba06d7a3"
+headers = {
+    "Authorization": f"Bearer {CUSTOMERIO_API_KEY}",
+    "Content-Type": "application/json"
+}
 
+# Functie om data van Customer.io op te halen
+def fetch_data(endpoint):
+    url = f"{CUSTOMERIO_BASE_URL}{endpoint}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+        return None
+
+# Routes
 @app.route('/get-campaigns', methods=['GET'])
 def get_campaigns():
-    # URL voor het ophalen van campagnes
-    url = f"{CUSTOMER_IO_BASE_URL}/campaigns"
-    
-    # Headers voor authenticatie
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    # Verzoek versturen
-    response = requests.get(url, headers=headers)
-    
-    # Foutafhandeling
-    if response.status_code != 200:
-        return jsonify({
-            "error": "Kan campagnes niet ophalen",
-            "status_code": response.status_code,
-            "details": response.text
-        }), response.status_code
-    
-    # Data teruggeven
-    return jsonify(response.json())
+    data = fetch_data("/campaigns")
+    return jsonify(data or {"error": "Unable to fetch campaigns"})
 
+@app.route('/get-segments', methods=['GET'])
+def get_segments():
+    data = fetch_data("/segments")
+    return jsonify(data or {"error": "Unable to fetch segments"})
+
+@app.route('/get-people', methods=['GET'])
+def get_people():
+    data = fetch_data("/customers")
+    return jsonify(data or {"error": "Unable to fetch people"})
+
+@app.route('/get-activity/<customer_id>', methods=['GET'])
+def get_activity(customer_id):
+    data = fetch_data(f"/customers/{customer_id}/activities")
+    return jsonify(data or {"error": f"Unable to fetch activity for customer {customer_id}"})
+
+@app.route('/webhooks', methods=['POST'])
+def receive_webhooks():
+    webhook_data = request.json
+    print("Webhook ontvangen:", webhook_data)
+    return jsonify({"message": "Webhook succesvol verwerkt"}), 200
+
+# Start de server
 if __name__ == "__main__":
-    # Laat de server luisteren op alle netwerkinterfaces en gebruik de juiste poort
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
